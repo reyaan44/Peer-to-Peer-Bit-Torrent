@@ -1,5 +1,7 @@
 package main
 
+import "net"
+
 type bencodeTorrent struct {
 	Announce string `bencode:"announce"`
 	Info     struct {
@@ -10,8 +12,17 @@ type bencodeTorrent struct {
 	} `bencode:"info"`
 }
 
+type PeerConnection struct {
+	connId     net.Conn
+	peer       Peer
+	peerId     []byte
+	choked     bool
+	interested bool
+	bitfield   []byte
+}
+
 type Peer struct {
-	IP   uint32
+	IP   string
 	Port uint16
 }
 
