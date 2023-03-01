@@ -31,6 +31,7 @@ func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers 
 
 	// Waiting for 5 seconds for the response
 	err = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
+	defer connection.SetReadDeadline(time.Time{})
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -198,7 +198,7 @@ func buildBitfield(bitfield []byte) []byte {
 	return buff
 }
 
-func buildRequestBlock(pieceIndex uint32, begin uint32, length uint32) []byte {
+func buildRequestBlock(pieceIndex uint32, length uint32, begin uint32) []byte {
 
 	// len = 13, id = 6, piece index, begin, length
 	buff := make([]byte, 17)
@@ -207,11 +207,11 @@ func buildRequestBlock(pieceIndex uint32, begin uint32, length uint32) []byte {
 
 	copy(buff[4:5], []byte{6})
 
-	binary.BigEndian.PutUint32(buff[5:], pieceIndex)
+	binary.BigEndian.PutUint32(buff[5:9], pieceIndex)
 
-	binary.BigEndian.PutUint32(buff[9:], begin)
+	binary.BigEndian.PutUint32(buff[9:13], begin)
 
-	binary.BigEndian.PutUint32(buff[13:], length)
+	binary.BigEndian.PutUint32(buff[13:17], length)
 
 	return buff
 }
