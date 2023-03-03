@@ -28,12 +28,22 @@ type bencodeTorrentFiles struct {
 	} `bencode:"info"`
 }
 
+type File struct {
+	index  int
+	path   string
+	length int
+}
+
 type Piece struct {
-	index    uint32
-	length   uint32
-	hash     [20]byte
-	finished bool
-	data     []byte
+	index       uint32
+	length      uint32
+	hash        [20]byte
+	data        []byte
+	filesOffset []struct {
+		startOffset  int
+		lengthOffset int
+		fileOffset   File
+	}
 }
 
 type PeerConnection struct {
