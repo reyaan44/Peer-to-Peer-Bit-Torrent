@@ -10,9 +10,13 @@ import (
 	gotorrentparser "github.com/j-muller/go-torrent-parser"
 )
 
-func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers *[]Peer, current int) {
+func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers *[]Peer, current int, reBuild bool) {
 
-	defer wg.Done()
+	if reBuild == false {
+		defer wg.Done()
+	} else {
+		defer wgRebuild.Done()
+	}
 
 	// Parsing the Announce of the Torrent in URL
 	URL, err := url.Parse(Torrent.Announce[current])
@@ -124,7 +128,7 @@ func getPeersList(Torrent *gotorrentparser.Torrent) []Peer {
 	for pos := range Torrent.Announce {
 		if Torrent.Announce[pos][0:3] == "udp" {
 			wg.Add(1)
-			go sendConnectionRequest(buff, Torrent, &peersList, pos)
+			go sendConnectionRequest(buff, Torrent, &peersList, pos, false)
 		}
 	}
 	wg.Wait()
@@ -132,4 +136,38 @@ func getPeersList(Torrent *gotorrentparser.Torrent) []Peer {
 	peersList = getUniquePeersList(peersList)
 
 	return peersList
+}
+
+func reBuildGetPeersList(Torrent *gotorrentparser.Torrent, peersList *[]Peer) int {
+
+	prevLength := len(*peersList)
+
+	newPeersList := []Peer{}
+
+	// Building the connection Request
+	buff := buildConnRequest()
+
+	// Sending the Connection Request to get the Peers List
+	for pos := range Torrent.Announce {
+		if Torrent.Announce[pos][0:3] == "udp" {
+			wgRebuild.Add(1)
+			go sendConnectionRequest(buff, Torrent, &newPeersList, pos, true)
+		}
+	}
+	wgRebuild.Wait()
+
+	// making a map to find distinct values
+	freq := map[Peer]bool{}
+
+	for _, i := range *peersList {
+		freq[i] = true
+	}
+
+	for _, i := range newPeersList {
+		if _, ok := freq[i]; !ok {
+			*peersList = append(*peersList, i)
+		}
+	}
+
+	return prevLength
 }

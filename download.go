@@ -30,15 +30,20 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 			}
 
 			// process currPiece
+
 			if peerConnection.choked == true {
 				QueueNeededPieces <- currPiece
 				err := StartReadMessage(peerConnection, pieces)
 				if err != nil {
 					fmt.Println(err)
+					peerConnection.connId.Close()
+					peerConnection.peer.Handshake = false
+					peerConnection.peer.InsideQueue = false
 					return
 				}
 				continue
 			}
+
 			if peerConnection.bitfield[currPiece.index] == false {
 				QueueNeededPieces <- currPiece
 				continue
@@ -48,6 +53,9 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 			recievedChecked := requestPiece(peerConnection, currPiece.index, pieces)
 			if recievedChecked == false {
 				QueueNeededPieces <- currPiece
+				peerConnection.connId.Close()
+				peerConnection.peer.Handshake = false
+				peerConnection.peer.InsideQueue = false
 				return
 			}
 
@@ -151,8 +159,7 @@ func setFilePieceOffset(pieces []*Piece, fileList []File) {
 
 		f, err := os.OpenFile(file.path, os.O_RDWR|os.O_CREATE, 0777)
 		if err != nil {
-			fmt.Println("Error opening file: ", err)
-			return
+			panic(err)
 		}
 		defer f.Close()
 

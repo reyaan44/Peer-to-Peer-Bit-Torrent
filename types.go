@@ -48,7 +48,7 @@ type Piece struct {
 
 type PeerConnection struct {
 	connId     net.Conn
-	peer       Peer
+	peer       *Peer
 	peerId     []byte
 	choked     bool
 	interested bool
@@ -56,8 +56,10 @@ type PeerConnection struct {
 }
 
 type Peer struct {
-	IP   string
-	Port uint16
+	IP          string
+	Port        uint16
+	Handshake   bool
+	InsideQueue bool
 }
 
 type ConnResp struct {

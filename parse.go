@@ -51,13 +51,15 @@ func parseAnnounceRequest(buff []byte, n int) AnnResp {
 		}
 		peerObj.IP += fmt.Sprintf("%d", buff[i+3])
 		peerObj.Port = binary.BigEndian.Uint16(buff[i+4 : i+6])
+		peerObj.Handshake = false
+		peerObj.InsideQueue = false
 		obj.PeerList = append(obj.PeerList, *peerObj)
 	}
 
 	return *obj
 }
 
-func parseHandShakeResp(buff []byte, connId net.Conn, currentPeer Peer) PeerConnection {
+func parseHandShakeResp(buff []byte, connId net.Conn, currentPeer *Peer) PeerConnection {
 
 	// Making a new object of the HandShake Response
 	obj := new(PeerConnection)
@@ -72,7 +74,7 @@ func parseHandShakeResp(buff []byte, connId net.Conn, currentPeer Peer) PeerConn
 
 	obj.interested = false
 
-	obj.bitfield = nil
+	obj.bitfield = make([]bool, pieceCount)
 
 	return *obj
 }

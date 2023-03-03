@@ -159,9 +159,13 @@ func SendRequest(peerConnection *PeerConnection, pieceIndex uint32, offset int, 
 	peerConnection.connId.Write(buff)
 }
 
-func SendHandshake(currentPeer Peer, Torrent *gotorrentparser.Torrent, peerConnectionList *[]PeerConnection) {
+func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConnectionList *[]PeerConnection, reBuild bool) {
 
-	defer wg.Done()
+	if reBuild == true {
+		defer wgRebuild.Done()
+	} else {
+		defer wg.Done()
+	}
 
 	connection, err := net.Dial("tcp", fmt.Sprintf("%s:%d", currentPeer.IP, currentPeer.Port))
 	if err != nil {
@@ -210,11 +214,14 @@ func SendHandshake(currentPeer Peer, Torrent *gotorrentparser.Torrent, peerConne
 		return
 	}
 
-	// TODO: Pass the total number of pieces to make a bitfield
+	currentPeer.Handshake = true
+
 	response := parseHandShakeResp(recieved, connection, currentPeer)
+
 	if peerConnectionList != nil {
 		*peerConnectionList = append(*peerConnectionList, response)
 	}
+
 }
 
 func SendInterested(peerConnection *PeerConnection) {
