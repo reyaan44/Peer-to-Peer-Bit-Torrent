@@ -106,10 +106,21 @@ func messageHandler(peerConnection *PeerConnection, pieces []*Piece) (bool, erro
 			}
 		}
 	case 6:
-		// Request Block Message
-		fmt.Println("Recieved Request Block Message")
+		// Request Block Message (Peer has requested Block from me)
+		fmt.Println("Recieved Message To Send Piece")
+		index := uint32(binary.BigEndian.Uint32(msg[0:4]))
+		begin := uint32(binary.BigEndian.Uint32(msg[4:8]))
+		length := uint32(binary.BigEndian.Uint32(msg[8:12]))
+		if myBitfield[index] == true {
+			buff, ok := readFromDisk(pieces[index])
+			if ok == true {
+				sendPiece(peerConnection, index, begin, buff[begin:begin+length])
+				peerConnection.peer.PiecesUpload++
+				uploadedTillNow += int(length)
+			}
+		}
 	case 7:
-		// Send Piece Message
+		// Send Piece Message (Peer has sent me a piece)
 		fmt.Println("Recieved Piece Message")
 		index := int32(binary.BigEndian.Uint32(msg[0:4]))
 		offset := int32(binary.BigEndian.Uint32(msg[4:8]))
@@ -173,8 +184,8 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 		return
 	}
 
-	// Waiting for 15 seconds for the response
-	err = connection.SetReadDeadline(time.Now().Add(15 * time.Second))
+	// Waiting for 10 seconds for the response
+	err = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
 	defer connection.SetReadDeadline(time.Time{})
 	if err != nil {
 		fmt.Println(err)
@@ -222,6 +233,10 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 		*peerConnectionList = append(*peerConnectionList, response)
 	}
 
+	sendBitfield(&response)
+	SendInterested(&response)
+	SendUnchoke(&response)
+
 }
 
 func SendInterested(peerConnection *PeerConnection) {
@@ -252,5 +267,21 @@ func sendHave(peerConnection *PeerConnection, pieceIndex uint32) {
 	// Sending the Have Message
 	fmt.Println("Sent Have")
 	peerConnection.connId.Write(buildHave(pieceIndex))
+
+}
+
+func sendPiece(peerConnection *PeerConnection, pieceIndex uint32, offset uint32, data []byte) {
+
+	// Sending the Piece Message
+	fmt.Println("Sent Piece")
+	peerConnection.connId.Write(buildPiecetoSend(pieceIndex, offset, data))
+
+}
+
+func sendBitfield(PeerConnection *PeerConnection) {
+
+	// Sending the Bitfield Message
+	fmt.Println("Sent Bitfield")
+	PeerConnection.connId.Write(buildBitfield(myBitfield))
 
 }

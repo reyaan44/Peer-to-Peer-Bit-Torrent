@@ -56,10 +56,12 @@ type PeerConnection struct {
 }
 
 type Peer struct {
-	IP          string
-	Port        uint16
-	Handshake   bool
-	InsideQueue bool
+	IP             string
+	Port           uint16
+	Handshake      bool
+	InsideQueue    bool
+	PiecesDownload int
+	PiecesUpload   int
 }
 
 type ConnResp struct {

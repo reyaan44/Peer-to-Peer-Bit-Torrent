@@ -53,6 +53,8 @@ func parseAnnounceRequest(buff []byte, n int) AnnResp {
 		peerObj.Port = binary.BigEndian.Uint16(buff[i+4 : i+6])
 		peerObj.Handshake = false
 		peerObj.InsideQueue = false
+		peerObj.PiecesDownload = 0
+		peerObj.PiecesUpload = 0
 		obj.PeerList = append(obj.PeerList, *peerObj)
 	}
 

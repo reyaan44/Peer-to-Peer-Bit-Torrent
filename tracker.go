@@ -98,6 +98,67 @@ func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers 
 	}
 }
 
+// func sendHTTPConnectionRequest(Torrent *gotorrentparser.Torrent, peers *[]Peer, current int, reBuild bool) {
+// 	if reBuild == false {
+// 		defer wg.Done()
+// 	} else {
+// 		defer wgRebuild.Done()
+// 	}
+
+// 	// Parsing the Announce of the Torrent in URL
+// 	URL, err := url.Parse(Torrent.Announce[current])
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return
+// 	}
+
+// 	params := url.Values{}
+
+// 	// Adding InfoHash 20 byte string
+// 	infoHash, _ := hex.DecodeString(Torrent.InfoHash)
+// 	params.Set("info_hash", hex.EncodeToString(infoHash))
+
+// 	// Adding PeerID 20 byte string
+// 	params.Set("peer_id", hex.EncodeToString(myPeerId[:]))
+
+// 	// Adding Port
+// 	params.Set("port", "6881")
+
+// 	// Adding Uploaded
+// 	params.Set("uploaded", strconv.Itoa(uploadedTillNow))
+
+// 	// Adding Downloaded
+// 	params.Set("downloaded", strconv.Itoa(downloadedTillNow))
+
+// 	// Adding Left
+// 	params.Set("left", strconv.Itoa(leftTillNow))
+
+// 	// Adding Compact
+// 	params.Set("compact", "1")
+
+// 	// Send an HTTP GET request to the tracker with the URL query string
+// 	requestString := URL.String() + "?" + params.Encode()
+// 	fmt.Println("REQUEST = ", requestString)
+// 	resp, err := http.Get(requestString)
+// 	if err != nil {
+// 		fmt.Println("Error sending request to tracker:", err)
+// 		return
+// 	}
+
+// 	fmt.Println("SENT = ", requestString)
+
+// 	result, err := bencode.Decode(resp.Body)
+// 	if err != nil {
+// 		fmt.Println("Error decoding tracker response:", err)
+// 		return
+// 	}
+
+// 	fmt.Println("RESULT = ", result)
+
+// 	defer resp.Body.Close()
+
+// }
+
 func getUniquePeersList(peersList []Peer) []Peer {
 
 	obj := []Peer{}
@@ -130,6 +191,10 @@ func getPeersList(Torrent *gotorrentparser.Torrent) []Peer {
 			wg.Add(1)
 			go sendConnectionRequest(buff, Torrent, &peersList, pos, false)
 		}
+		// else if Torrent.Announce[pos][0:4] == "http" {
+		// 	wg.Add(1)
+		// 	go sendHTTPConnectionRequest(Torrent, &peersList, pos, false)
+		// }
 	}
 	wg.Wait()
 
@@ -153,6 +218,10 @@ func reBuildGetPeersList(Torrent *gotorrentparser.Torrent, peersList *[]Peer) in
 			wgRebuild.Add(1)
 			go sendConnectionRequest(buff, Torrent, &newPeersList, pos, true)
 		}
+		// else if Torrent.Announce[pos][0:4] == "http" {
+		// 	wgRebuild.Add(1)
+		// 	go sendHTTPConnectionRequest(Torrent, &newPeersList, pos, true)
+		// }
 	}
 	wgRebuild.Wait()
 

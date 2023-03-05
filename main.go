@@ -18,6 +18,12 @@ var myPeerId []byte
 var pieceCount int
 var pieceSize int
 
+var downloadedTillNow int
+var uploadedTillNow int
+var leftTillNow int
+
+var myBitfield []bool
+
 func main() {
 
 	myPeerId = generateRandomBytes(20)
@@ -86,6 +92,8 @@ func main() {
 	fmt.Println("Total Length : ", totalLength)
 	fmt.Println("Last Piece Size : ", lastPieceSize)
 
+	myBitfield = make([]bool, pieceCount)
+
 	pieces := make([]*Piece, pieceCount)
 
 	for i := 0; i < pieceCount; i++ {
@@ -103,6 +111,23 @@ func main() {
 	// For each piece, write the corresponding files along with their offsets for the files
 	setFilePieceOffset(pieces, fileList)
 
+	// Make channels and add Pieces
+	QueueNeededPieces := make(chan *Piece, pieceCount)
+	QueueFinishedPieces := make(chan *Piece, pieceCount)
+	defer close(QueueNeededPieces)
+	defer close(QueueFinishedPieces)
+
+	for i := range pieces {
+		_, check := readFromDisk(pieces[i])
+		if check == true {
+			myBitfield[i] = true
+			downloadedTillNow += int(pieces[i].length)
+			continue
+		}
+		leftTillNow += int(pieces[i].length)
+		QueueNeededPieces <- pieces[i]
+	}
+
 	// Parsing the torrent using gotorrentparser
 	Torrent, err := gotorrentparser.ParseFromFile(filePath)
 	if err != nil {
@@ -110,7 +135,6 @@ func main() {
 	}
 
 	peersList := getPeersList(Torrent)
-	fmt.Println(peersList)
 	fmt.Println("Total Number of Peers : ", len(peersList))
 
 	// For every peer in the list, start a new goroutine for tcp connection
@@ -120,17 +144,9 @@ func main() {
 		go SendHandshake(&peersList[current], Torrent, &peerConnectionTcpList, false)
 	}
 	wg.Wait()
+
 	successfulPeers := len(peerConnectionTcpList)
 	fmt.Println("Total Number of Successful Peers : ", successfulPeers)
-
-	QueueNeededPieces := make(chan *Piece, pieceCount)
-	QueueFinishedPieces := make(chan *Piece, pieceCount)
-	defer close(QueueNeededPieces)
-	defer close(QueueFinishedPieces)
-
-	for i := range pieces {
-		QueueNeededPieces <- pieces[i]
-	}
 
 	for i := range peerConnectionTcpList {
 		peerConnectionTcpList[i].peer.InsideQueue = true
@@ -138,47 +154,33 @@ func main() {
 		go startNewDownload(&peerConnectionTcpList[i], Torrent, QueueNeededPieces, QueueFinishedPieces, pieces)
 	}
 
-	done := make(chan bool) // Create a done channel
+	// Create a channel to signal when all downloads are done
+	done := make(chan bool)
+	// Create a channel to signal when we need to send a ReConnection Message
+	channelReConnection := make(chan bool)
 
 	go func() {
 		wg.Wait() // Wait for all downloads to complete
-		if len(QueueFinishedPieces) == pieceCount {
+		if downloadedTillNow == totalLength && leftTillNow == 0 {
 			fmt.Println("Download Finished")
 		} else {
-			fmt.Println("Download Not Finished")
+			fmt.Println("Some Error, Download Not Finished")
 		}
 		done <- true // Send a message on the done channel when all downloads have finished
 	}()
 
-	waitTime := 180
-	switch {
-	case successfulPeers < 0:
-		fmt.Println("Negative")
-		break
-	case successfulPeers <= 10:
-		waitTime = 60
-		break
-	case successfulPeers <= 20:
-		waitTime = 70
-		break
-	case successfulPeers <= 30:
-		waitTime = 80
-		break
-	case successfulPeers <= 50:
-		waitTime = 90
-		break
-	case successfulPeers <= 100:
-		waitTime = 150
-		break
-	default:
-		waitTime = 180
-		break
-	}
+	go func(channelReConnection chan bool) {
+		for {
+			time.Sleep(time.Duration(waitTimeReConnection(successfulPeers)) * time.Second)
+			channelReConnection <- true
+		}
+	}(channelReConnection)
 
 downloadLoop:
 	for {
 		select {
-		case <-time.After(time.Duration(waitTime) * time.Second):
+
+		case <-channelReConnection:
 
 			fmt.Println("ReHandshaking and Reconnecting")
 
@@ -206,7 +208,6 @@ downloadLoop:
 					go startNewDownload(&peerConnectionTcpList[current], Torrent, QueueNeededPieces, QueueFinishedPieces, pieces)
 				}
 			}
-			break
 
 		case <-done:
 			// All downloads have finished

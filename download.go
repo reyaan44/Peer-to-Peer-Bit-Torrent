@@ -5,20 +5,22 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	gotorrentparser "github.com/j-muller/go-torrent-parser"
 )
 
 var mutexDataWrite sync.Mutex
+var averageSpeed float64
+var SMOOTHING_FACTOR = 0.5
 
 func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.Torrent,
 	QueueNeededPieces chan *Piece, QueueFinishedPieces chan *Piece, pieces []*Piece) {
 
 	defer wg.Done()
 
-	SendInterested(peerConnection)
-	SendUnchoke(peerConnection)
 	StartReadMessage(peerConnection, pieces)
+	sendBitfield(peerConnection)
 
 	for {
 		select {
@@ -29,14 +31,18 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				return
 			}
 
-			// process currPiece
+			if peerConnection.peer.Handshake == false || peerConnection.peer.InsideQueue == false {
+				QueueNeededPieces <- currPiece
+				peerConnection.peer.Handshake = false
+				peerConnection.peer.InsideQueue = false
+				return
+			}
 
 			if peerConnection.choked == true {
 				QueueNeededPieces <- currPiece
 				err := StartReadMessage(peerConnection, pieces)
 				if err != nil {
 					fmt.Println(err)
-					peerConnection.connId.Close()
 					peerConnection.peer.Handshake = false
 					peerConnection.peer.InsideQueue = false
 					return
@@ -49,20 +55,50 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				continue
 			}
 
+			startTime := time.Now()
+			// process currPiece
 			fmt.Printf("Sending request for piece : %d to connectionId : %d\n", currPiece.index, peerConnection.peerId[:])
 			recievedChecked := requestPiece(peerConnection, currPiece.index, pieces)
 			if recievedChecked == false {
 				QueueNeededPieces <- currPiece
-				peerConnection.connId.Close()
 				peerConnection.peer.Handshake = false
 				peerConnection.peer.InsideQueue = false
 				return
 			}
 
+			peerConnection.peer.PiecesDownload++
 			QueueFinishedPieces <- currPiece
+			myBitfield[currPiece.index] = true
+
+			downloadedTillNow += int(currPiece.length)
+			leftTillNow -= int(currPiece.length)
+
+			elapsedTime := time.Since(startTime)
+			currDownloadSpeed := float64(currPiece.length) / elapsedTime.Seconds()
+			averageSpeed = SMOOTHING_FACTOR*currDownloadSpeed + (1-SMOOTHING_FACTOR)*averageSpeed
+			timeLeft := time.Duration(float64(leftTillNow) / averageSpeed * float64(time.Second))
+
 			fmt.Printf("Recieved Piece : %d from connectionId : %d\n", currPiece.index, peerConnection.peerId[:])
-			fmt.Printf("Download = %.0f%%\n", float64(len(QueueFinishedPieces)*100)/float64(pieceCount))
-			sendHave(peerConnection, currPiece.index)
+			fmt.Printf("Download = %.2f%%\n", float64(downloadedTillNow*100)/float64(leftTillNow+downloadedTillNow))
+			fmt.Printf("Downloaded = %.2f MB / %.2f MB\n", float64(downloadedTillNow)/float64(1024*1024), float64(leftTillNow+downloadedTillNow)/float64(1024*1024))
+			fmt.Printf("Download Speed = %.2f KB/s\n", averageSpeed/float64(1024))
+			fmt.Printf("Time Left = %s\n", timeLeft.Round(time.Second).String())
+
+			// Check if peer is bad, if yes, close the connection
+			PiecesDownload := peerConnection.peer.PiecesDownload
+			PiecesUpload := peerConnection.peer.PiecesUpload
+
+			if PiecesDownload >= 3 && PiecesUpload >= 3 {
+				ratio := float64(PiecesDownload) / float64(PiecesUpload)
+				if ratio < 0.5 {
+					fmt.Println("Removing Bad Peer : ", peerConnection.peerId, " Ratio : ", ratio)
+					peerConnection.peer.Handshake = false
+					peerConnection.peer.InsideQueue = false
+					return
+				}
+			}
+
+			StartReadMessage(peerConnection, pieces)
 
 		default:
 			// channel is empty, no more data expected, exit loop
@@ -106,6 +142,8 @@ func writeToDisk(pieces *Piece) bool {
 
 	// Only 1 goroutine can access the shared resource at a time
 
+	// TODOL Handle Panic calls here
+
 	wgDataWrite := sync.WaitGroup{}
 
 	currentPieceOffset := 0
@@ -147,6 +185,62 @@ func writeToDisk(pieces *Piece) bool {
 	wgDataWrite.Wait()
 
 	return true
+
+}
+
+func readFromDisk(pieces *Piece) ([]byte, bool) {
+
+	// Only 1 goroutine can access the shared resource at a time
+
+	wgDataRead := sync.WaitGroup{}
+
+	currentPieceOffset := 0
+	data := make([]byte, pieces.length)
+
+	for pos := range pieces.filesOffset {
+
+		currPos := pos
+		currCurrentPieceOffset := currentPieceOffset
+		wgDataRead.Add(1)
+		go func(currPos int, currCurrentPieceOffset int) {
+
+			// Lock the mutex to ensure exclusive access to the file
+			mutexDataWrite.Lock()
+			defer mutexDataWrite.Unlock()
+			defer wgDataRead.Done()
+
+			startPiece := pieces.filesOffset[currPos].startOffset // This is offset for file
+			length := pieces.filesOffset[currPos].lengthOffset    // This is for file and pieces both
+			File := pieces.filesOffset[currPos].fileOffset        // This is file
+
+			// Open the file for writing
+			f, err := os.OpenFile(File.path, os.O_RDWR|os.O_CREATE, 0777)
+			if err != nil {
+				return
+			}
+			defer f.Close()
+
+			_, err = f.ReadAt(data[currCurrentPieceOffset:currCurrentPieceOffset+length], int64(startPiece))
+			if err != nil {
+				return
+			}
+
+		}(currPos, currCurrentPieceOffset)
+
+		currentPieceOffset += pieces.filesOffset[pos].lengthOffset
+	}
+
+	wgDataRead.Wait()
+
+	check := sha1.Sum(data[:]) == pieces.hash
+	if check == false {
+		fmt.Println("Read, Data Hash does not Match")
+		return data, false
+	} else {
+		fmt.Println("Read, Data Hash Matched")
+	}
+
+	return data, true
 
 }
 
