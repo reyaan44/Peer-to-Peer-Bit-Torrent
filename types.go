@@ -60,8 +60,8 @@ type Peer struct {
 	Port           uint16
 	Handshake      bool
 	InsideQueue    bool
-	PiecesDownload int
-	PiecesUpload   int
+	PiecesDownload int // Pieces Downloaded from the peer
+	PiecesUpload   int // Pieces Uploaded to the peer
 }
 
 type ConnResp struct {

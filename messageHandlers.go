@@ -108,6 +108,10 @@ func messageHandler(peerConnection *PeerConnection, pieces []*Piece) (bool, erro
 	case 6:
 		// Request Block Message (Peer has requested Block from me)
 		fmt.Println("Recieved Message To Send Piece")
+		if len(msg) != 12 {
+			fmt.Println("Invalid Request Message")
+			return false, nil
+		}
 		index := uint32(binary.BigEndian.Uint32(msg[0:4]))
 		begin := uint32(binary.BigEndian.Uint32(msg[4:8]))
 		length := uint32(binary.BigEndian.Uint32(msg[8:12]))
@@ -117,6 +121,16 @@ func messageHandler(peerConnection *PeerConnection, pieces []*Piece) (bool, erro
 				sendPiece(peerConnection, index, begin, buff[begin:begin+length])
 				peerConnection.peer.PiecesUpload++
 				uploadedTillNow += int(length)
+			}
+		}
+		// Check if peer is bad, if yes, close the connection
+		PiecesDownload := peerConnection.peer.PiecesDownload
+		PiecesUpload := peerConnection.peer.PiecesUpload
+		if PiecesUpload >= 10 {
+			ratio := float64(PiecesDownload) / float64(PiecesUpload)
+			if ratio <= 0.5 {
+				fmt.Println("Removing Bad Peer : ", peerConnection.peerId, " Ratio : ", ratio)
+				SendChoke(peerConnection)
 			}
 		}
 	case 7:
@@ -233,9 +247,9 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 		*peerConnectionList = append(*peerConnectionList, response)
 	}
 
-	sendBitfield(&response)
-	SendInterested(&response)
 	SendUnchoke(&response)
+	SendInterested(&response)
+	sendBitfield(&response)
 
 }
 
@@ -252,6 +266,14 @@ func SendUnchoke(peerConnection *PeerConnection) {
 	// Sending the Unchoke Message
 	fmt.Println("Sent Unchoke")
 	peerConnection.connId.Write(buildUnchoke())
+
+}
+
+func SendChoke(peerConnection *PeerConnection) {
+
+	// Sending the Choke Message
+	fmt.Println("Sent Choke")
+	peerConnection.connId.Write(buildChoke())
 
 }
 

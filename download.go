@@ -88,13 +88,14 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 			PiecesDownload := peerConnection.peer.PiecesDownload
 			PiecesUpload := peerConnection.peer.PiecesUpload
 
-			if PiecesDownload >= 3 && PiecesUpload >= 3 {
+			if PiecesDownload >= 5 {
+				if PiecesUpload == 0 {
+					PiecesUpload = 1
+				}
 				ratio := float64(PiecesDownload) / float64(PiecesUpload)
-				if ratio < 0.5 {
-					fmt.Println("Removing Bad Peer : ", peerConnection.peerId, " Ratio : ", ratio)
-					peerConnection.peer.Handshake = false
-					peerConnection.peer.InsideQueue = false
-					return
+				if ratio >= 1 {
+					fmt.Println("Good Peer : ", peerConnection.peerId, " Ratio : ", ratio)
+					SendUnchoke(peerConnection)
 				}
 			}
 

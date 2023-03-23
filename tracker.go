@@ -1,13 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	gotorrentparser "github.com/j-muller/go-torrent-parser"
+	bencode "github.com/jackpal/bencode-go"
 )
 
 func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers *[]Peer, current int, reBuild bool) {
@@ -98,66 +104,96 @@ func sendConnectionRequest(buff []byte, Torrent *gotorrentparser.Torrent, peers 
 	}
 }
 
-// func sendHTTPConnectionRequest(Torrent *gotorrentparser.Torrent, peers *[]Peer, current int, reBuild bool) {
-// 	if reBuild == false {
-// 		defer wg.Done()
-// 	} else {
-// 		defer wgRebuild.Done()
-// 	}
+func sendHTTPConnectionRequest(Torrent *gotorrentparser.Torrent, peers *[]Peer, current int, reBuild bool) {
 
-// 	// Parsing the Announce of the Torrent in URL
-// 	URL, err := url.Parse(Torrent.Announce[current])
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return
-// 	}
+	if reBuild == false {
+		defer wg.Done()
+	} else {
+		defer wgRebuild.Done()
+	}
 
-// 	params := url.Values{}
+	// Parsing the Announce of the Torrent in URL
+	URL, err := url.Parse(Torrent.Announce[current])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-// 	// Adding InfoHash 20 byte string
-// 	infoHash, _ := hex.DecodeString(Torrent.InfoHash)
-// 	params.Set("info_hash", hex.EncodeToString(infoHash))
+	params := url.Values{}
 
-// 	// Adding PeerID 20 byte string
-// 	params.Set("peer_id", hex.EncodeToString(myPeerId[:]))
+	// Adding InfoHash 20 byte string
+	infoHash, _ := hex.DecodeString(Torrent.InfoHash)
 
-// 	// Adding Port
-// 	params.Set("port", "6881")
+	// Adding Port
+	params.Add("port", "6881")
 
-// 	// Adding Uploaded
-// 	params.Set("uploaded", strconv.Itoa(uploadedTillNow))
+	// Adding Uploaded
+	params.Add("uploaded", strconv.Itoa(uploadedTillNow))
 
-// 	// Adding Downloaded
-// 	params.Set("downloaded", strconv.Itoa(downloadedTillNow))
+	// Adding Downloaded
+	params.Add("downloaded", strconv.Itoa(downloadedTillNow))
 
-// 	// Adding Left
-// 	params.Set("left", strconv.Itoa(leftTillNow))
+	// Adding Left
+	params.Add("left", strconv.Itoa(leftTillNow))
 
-// 	// Adding Compact
-// 	params.Set("compact", "1")
+	// Adding Compact
+	params.Add("compact", "1")
 
-// 	// Send an HTTP GET request to the tracker with the URL query string
-// 	requestString := URL.String() + "?" + params.Encode()
-// 	fmt.Println("REQUEST = ", requestString)
-// 	resp, err := http.Get(requestString)
-// 	if err != nil {
-// 		fmt.Println("Error sending request to tracker:", err)
-// 		return
-// 	}
+	// Adding Numwant
+	params.Add("numwant", "100")
 
-// 	fmt.Println("SENT = ", requestString)
+	// Send an HTTP GET request to the tracker with the URL query string
+	requestString := "http://" + URL.Host + "/announce?info_hash=" + url.QueryEscape(string(infoHash)) + "&peer_id=" + url.QueryEscape(string(myPeerId)) + "&" + params.Encode()
+	fmt.Println(requestString)
 
-// 	result, err := bencode.Decode(resp.Body)
-// 	if err != nil {
-// 		fmt.Println("Error decoding tracker response:", err)
-// 		return
-// 	}
+	// To obtain the response of the GET request
+	response, err := http.Get(requestString)
+	if err != nil {
+		fmt.Println("Error sending request to tracker:", err)
+		return
+	}
+	defer response.Body.Close()
 
-// 	fmt.Println("RESULT = ", result)
+	// Read response body as bytes
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return
+	}
 
-// 	defer resp.Body.Close()
+	// Decode bencoded data
+	decodedBody, err := bencode.Decode(bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("Error decoding bencoded data:", err)
+		return
+	}
 
-// }
+	// Extract peers from tracker response
+	PeersBytes, ok := decodedBody.(map[string]interface{})["peers"].(string)
+	if !ok {
+		fmt.Println("Error extracting peers from tracker response")
+		return
+	}
+
+	// Extract peer IP addresses and ports
+	for i := 0; i < len(PeersBytes); i += 6 {
+
+		buff := []byte(PeersBytes[i : i+6])
+
+		peerObj := new(Peer)
+
+		peerObj.IP = net.IP(buff[0:4]).String()
+		peerObj.Port = binary.BigEndian.Uint16(buff[4:6])
+		peerObj.Handshake = false
+		peerObj.InsideQueue = false
+		peerObj.PiecesDownload = 0
+		peerObj.PiecesUpload = 0
+
+		*peers = append(*peers, *peerObj)
+
+	}
+
+}
 
 func getUniquePeersList(peersList []Peer) []Peer {
 
@@ -190,11 +226,10 @@ func getPeersList(Torrent *gotorrentparser.Torrent) []Peer {
 		if Torrent.Announce[pos][0:3] == "udp" {
 			wg.Add(1)
 			go sendConnectionRequest(buff, Torrent, &peersList, pos, false)
+		} else if Torrent.Announce[pos][0:4] == "http" {
+			wg.Add(1)
+			go sendHTTPConnectionRequest(Torrent, &peersList, pos, false)
 		}
-		// else if Torrent.Announce[pos][0:4] == "http" {
-		// 	wg.Add(1)
-		// 	go sendHTTPConnectionRequest(Torrent, &peersList, pos, false)
-		// }
 	}
 	wg.Wait()
 
@@ -217,11 +252,10 @@ func reBuildGetPeersList(Torrent *gotorrentparser.Torrent, peersList *[]Peer) in
 		if Torrent.Announce[pos][0:3] == "udp" {
 			wgRebuild.Add(1)
 			go sendConnectionRequest(buff, Torrent, &newPeersList, pos, true)
+		} else if Torrent.Announce[pos][0:4] == "http" {
+			wgRebuild.Add(1)
+			go sendHTTPConnectionRequest(Torrent, &newPeersList, pos, true)
 		}
-		// else if Torrent.Announce[pos][0:4] == "http" {
-		// 	wgRebuild.Add(1)
-		// 	go sendHTTPConnectionRequest(Torrent, &newPeersList, pos, true)
-		// }
 	}
 	wgRebuild.Wait()
 

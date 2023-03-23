@@ -3,7 +3,7 @@
 ## 05-03-2023
 ### Till Now
 1. The bittorrent client supports single-file and multi-file downloads with efficient distribution capabilities.
-2. The client utilizes UDP trackers and modern internet protocols to communicate with peers in the network.
+2. The client utilizes UDP and HTTP trackers and modern internet protocols to communicate with peers in the network.
 3. Network scanning for peer discovery is periodically performed to maintain up-to-date peer lists.
 4. Automatic reconnection to previously closed connections is implemented to maximize download success rates.
 5. Data is written directly to disk upon receipt of a piece to optimize performance and prevent memory bloat.
@@ -11,14 +11,11 @@
 7. The client avoids redundant resource usage by skipping pieces that have already been downloaded (A Naive Pause/Resume Functionality).
 
 ### Todo
-1. Additional tracker support (beyond UDP, preferably HTTP) to expand connectivity options for users.
-2. Peer rating system implementation to identify and avoid bad peers.
+1. Explore DHT.
+2. Explore Magnet Links.
 3. NAT traversal implementation for improved peer connectivity behind firewalls.
-4. Listener implementation on port 6881 to enable handshake response handling.
-5. Explore DHT.
-6. Explore Magnet Links.
-7. Explore Peers Pieces Mapping Algorithms.
-8. Explore UTP.
+4. Peer rating system implementation to identify and avoid bad peers.
+5. Listener implementation on port 6881 to enable handshake response handling.
 
 ## 04-03-2023
 ### Till Now
@@ -29,7 +26,7 @@
 5. The client establishes new connections with peers via handshakes in set intervals, and can automatically reconnect to connections that previously closed, maximizing the chance of successful downloads.
 6. The client writes files directly to disk as soon as data for a piece is received, preventing memory bloat and ensuring optimal performance.
 ### Todo
-1. Work on adding support for additional trackers beyond UDP, such as HTTP to provide more options for users to connect with peers.
+1. (DONE) Work on adding support for additional trackers beyond UDP, such as HTTP to provide more options for users to connect with peers.
 2. (DONE) Work on improving the file resuming functionality, ensuring that only the missing pieces are downloaded, and the existing pieces are not re-downloaded, optimizing file downloads.
 3. (DONE) Implement an estimated time left feature to display the time remaining for download completion, improving user satisfaction and experience.
 4. (DONE) Work on implementing uploads to ensure efficient sharing of files in the bittorrent network, optimizing the upload/download ratio for improved performance.
