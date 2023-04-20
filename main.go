@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	excelize "github.com/360EntSecGroup-Skylar/excelize"
 	gotorrentparser "github.com/j-muller/go-torrent-parser"
 	bencode "github.com/jackpal/bencode-go"
 )
@@ -217,10 +218,72 @@ downloadLoop:
 	// Interesting Case, If all the pieces are downloaded, but then just before that, rebuild is called, it will still send a startDownload message
 	wg.Wait()
 
+	// Create a new Excel file.
+	excelFile := excelize.NewFile()
+
 	// Close all the connections
-	fmt.Println("Closing all the connections")
+	fmt.Println("Creating Sheet and Closing all the connections")
+
+	// Create a slice of data for Sheet.
+	ExcelData := [][]interface{}{
+		{"Ip Address", "Port Number", "Pieces Downloaded By Us", "Pieces Uploaded By Us", "Rating"},
+	}
+
+	// Normalization
+	minRatio := -1.0
+	maxRatio := -1.0
+
 	for i := range peerConnectionTcpList {
+
+		// Pieces Downloaded by us
+		peerPiecesDownloaded := peerConnectionTcpList[i].peer.PiecesDownload
+		// Pieces Uploaded by us
+		peerPiecesGiven := peerConnectionTcpList[i].peer.PiecesUpload + 1
+		// Ratio
+		ratioPieces := float64(peerPiecesDownloaded) / float64(peerPiecesGiven)
+
+		if minRatio == -1 {
+			minRatio = ratioPieces
+			maxRatio = ratioPieces
+		}
+		if ratioPieces < minRatio {
+			minRatio = ratioPieces
+		}
+		if ratioPieces > maxRatio {
+			maxRatio = ratioPieces
+		}
+	}
+
+	for i := range peerConnectionTcpList {
+
 		peerConnectionTcpList[i].connId.Close()
+
+		// Pieces Downloaded by us
+		peerPiecesDownloaded := peerConnectionTcpList[i].peer.PiecesDownload
+		// Pieces Uploaded by us
+		peerPiecesGiven := peerConnectionTcpList[i].peer.PiecesUpload + 1
+		// Ratio
+		ratioPieces := float64(peerPiecesDownloaded) / float64(peerPiecesGiven)
+
+		// Normalization
+		rating := (float64(ratioPieces-minRatio) / float64(maxRatio-minRatio+1)) * 100
+
+		ExcelData = append(ExcelData, []interface{}{peerConnectionTcpList[i].peer.IP, peerConnectionTcpList[i].peer.Port,
+			peerPiecesDownloaded, peerPiecesGiven, rating})
+
+	}
+
+	// Write the ExcelData to the Excel file.
+	for i, row := range ExcelData {
+		for j, val := range row {
+			cell := excelize.ToAlphaString(j+1) + fmt.Sprintf("%d", i+1)
+			excelFile.SetCellValue("Sheet1", cell, val)
+		}
+	}
+
+	// Save the file.
+	if err := excelFile.SaveAs("./Reyaan-Downloads/Reyaan-Peers-Data.xlsx"); err != nil {
+		fmt.Println(err)
 	}
 
 }

@@ -4,16 +4,6 @@ import (
 	"net"
 )
 
-type bencodeTorrent struct {
-	Announce string `bencode:"announce"`
-	Info     struct {
-		PieceLength int    `bencode:"piece length"`
-		Pieces      string `bencode:"pieces"`
-		Name        string `bencode:"name"`
-		Length      int    `bencode:"length"`
-	} `bencode:"info"`
-}
-
 type bencodeTorrentFiles struct {
 	Announce string `bencode:"announce"`
 	Info     struct {
@@ -60,8 +50,8 @@ type Peer struct {
 	Port           uint16
 	Handshake      bool
 	InsideQueue    bool
-	PiecesDownload int // Pieces Downloaded from the peer
-	PiecesUpload   int // Pieces Uploaded to the peer
+	PiecesDownload int // Pieces Downloaded by us
+	PiecesUpload   int // Pieces Uploaded by us
 }
 
 type ConnResp struct {

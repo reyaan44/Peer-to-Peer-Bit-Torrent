@@ -96,6 +96,12 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				if ratio >= 1 {
 					fmt.Println("Good Peer : ", peerConnection.peerId, " Ratio : ", ratio)
 					SendUnchoke(peerConnection)
+				} else if ratio < 0.01 {
+					fmt.Println("Bad Peer : ", peerConnection.peerId, " Ratio : ", ratio)
+					peerConnection.peer.Handshake = false
+					peerConnection.peer.InsideQueue = false
+					SendChoke(peerConnection)
+					return
 				}
 			}
 
