@@ -33,30 +33,30 @@ func max(a int, b int) int {
 }
 
 func waitTimeReConnection(successfulPeers int) int {
-	waitTimeReConnection := 180
-	switch {
-	case successfulPeers < 0:
-		fmt.Println("Negative")
-		break
-	case successfulPeers <= 10:
-		waitTimeReConnection = 60
-		break
-	case successfulPeers <= 20:
-		waitTimeReConnection = 90
-		break
-	case successfulPeers <= 30:
-		waitTimeReConnection = 110
-		break
-	case successfulPeers <= 50:
-		waitTimeReConnection = 120
-		break
-	case successfulPeers <= 100:
-		waitTimeReConnection = 150
-		break
-	default:
-		waitTimeReConnection = 180
-		break
-	}
+	waitTimeReConnection := 300
+	// switch {
+	// case successfulPeers < 0:
+	// 	fmt.Println("Negative")
+	// 	break
+	// case successfulPeers <= 10:
+	// 	waitTimeReConnection = 60
+	// 	break
+	// case successfulPeers <= 20:
+	// 	waitTimeReConnection = 90
+	// 	break
+	// case successfulPeers <= 30:
+	// 	waitTimeReConnection = 110
+	// 	break
+	// case successfulPeers <= 50:
+	// 	waitTimeReConnection = 120
+	// 	break
+	// case successfulPeers <= 100:
+	// 	waitTimeReConnection = 150
+	// 	break
+	// default:
+	// 	waitTimeReConnection = 180
+	// 	break
+	// }
 	return waitTimeReConnection
 }
 
