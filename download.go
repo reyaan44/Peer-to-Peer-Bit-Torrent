@@ -19,7 +19,10 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 
 	defer wg.Done()
 
-	StartReadMessage(peerConnection, pieces)
+	err := StartReadMessage(peerConnection, pieces)
+	if err != nil {
+		return
+	}
 	sendBitfield(peerConnection)
 
 	for {
@@ -105,7 +108,10 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				}
 			}
 
-			StartReadMessage(peerConnection, pieces)
+			err := StartReadMessage(peerConnection, pieces)
+			if err != nil {
+				return
+			}
 
 		default:
 			// channel is empty, no more data expected, exit loop
