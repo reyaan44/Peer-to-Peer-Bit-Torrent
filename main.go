@@ -27,6 +27,8 @@ var myBitfield []bool
 
 func main() {
 
+	totalPeersUsedForPieces = make(map[string]bool)
+
 	myPeerId = generateRandomBytes(20)
 
 	arg := os.Args[:]
@@ -217,6 +219,8 @@ downloadLoop:
 	}
 	// Interesting Case, If all the pieces are downloaded, but then just before that, rebuild is called, it will still send a startDownload message
 	wg.Wait()
+
+	fmt.Println("Total Peers Used To Recieve Pieces : ", len(totalPeersUsedForPieces))
 
 	// Create a new Excel file.
 	excelFile := excelize.NewFile()

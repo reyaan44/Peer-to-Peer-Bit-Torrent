@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	gotorrentparser "github.com/j-muller/go-torrent-parser"
 )
 
+var totalPeersUsedForPieces map[string]bool
 var mutexDataWrite sync.Mutex
-var averageSpeed float64
-var SMOOTHING_FACTOR = 0.5
 
 func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.Torrent,
 	QueueNeededPieces chan *Piece, QueueFinishedPieces chan *Piece, pieces []*Piece) {
@@ -25,7 +23,9 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 	}
 	sendBitfield(peerConnection)
 
-	for {
+	maxTryforPiece := 20
+
+	for maxTryforPiece > 0 {
 		select {
 		case currPiece, ok := <-QueueNeededPieces:
 
@@ -43,22 +43,21 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 
 			if peerConnection.choked == true {
 				QueueNeededPieces <- currPiece
-				err := StartReadMessage(peerConnection, pieces)
-				if err != nil {
-					fmt.Println(err)
-					peerConnection.peer.Handshake = false
-					peerConnection.peer.InsideQueue = false
-					return
-				}
-				continue
+				peerConnection.peer.Handshake = false
+				peerConnection.peer.InsideQueue = false
+				return
 			}
 
 			if peerConnection.bitfield[currPiece.index] == false {
 				QueueNeededPieces <- currPiece
+				maxTryforPiece--
 				continue
 			}
 
-			startTime := time.Now()
+			maxTryforPiece = 20
+
+			totalPeersUsedForPieces[string(peerConnection.peerId)] = true
+
 			// process currPiece
 			fmt.Printf("Sending request for piece : %d to connectionId : %d\n", currPiece.index, peerConnection.peerId[:])
 			recievedChecked := requestPiece(peerConnection, currPiece.index, pieces)
@@ -76,16 +75,9 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 			downloadedTillNow += int(currPiece.length)
 			leftTillNow -= int(currPiece.length)
 
-			elapsedTime := time.Since(startTime)
-			currDownloadSpeed := float64(currPiece.length) / elapsedTime.Seconds()
-			averageSpeed = SMOOTHING_FACTOR*currDownloadSpeed + (1-SMOOTHING_FACTOR)*averageSpeed
-			timeLeft := time.Duration(float64(leftTillNow) / averageSpeed * float64(time.Second))
-
 			fmt.Printf("Recieved Piece : %d from connectionId : %d\n", currPiece.index, peerConnection.peerId[:])
 			fmt.Printf("Download = %.2f%%\n", float64(downloadedTillNow*100)/float64(leftTillNow+downloadedTillNow))
 			fmt.Printf("Downloaded = %.2f MB / %.2f MB\n", float64(downloadedTillNow)/float64(1024*1024), float64(leftTillNow+downloadedTillNow)/float64(1024*1024))
-			fmt.Printf("Download Speed = %.2f KB/s\n", averageSpeed/float64(1024))
-			fmt.Printf("Time Left = %s\n", timeLeft.Round(time.Second).String())
 
 			// Check if peer is bad, if yes, close the connection
 			PiecesDownload := peerConnection.peer.PiecesDownload
@@ -98,7 +90,9 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				ratio := float64(PiecesDownload) / float64(PiecesUpload)
 				if ratio >= 1 {
 					fmt.Println("Good Peer : ", peerConnection.peerId, " Ratio : ", ratio)
-					SendUnchoke(peerConnection)
+					if peerConnection.choked == true {
+						SendUnchoke(peerConnection)
+					}
 				} else if ratio < 0.01 {
 					fmt.Println("Bad Peer : ", peerConnection.peerId, " Ratio : ", ratio)
 					peerConnection.peer.Handshake = false
@@ -108,7 +102,6 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 				}
 			}
 
-			err := StartReadMessage(peerConnection, pieces)
 			if err != nil {
 				return
 			}
@@ -157,21 +150,15 @@ func writeToDisk(pieces *Piece) bool {
 
 	// TODOL Handle Panic calls here
 
-	wgDataWrite := sync.WaitGroup{}
-
 	currentPieceOffset := 0
 
 	for pos := range pieces.filesOffset {
 
 		currPos := pos
 		currCurrentPieceOffset := currentPieceOffset
-		wgDataWrite.Add(1)
-		go func(currPos int, currCurrentPieceOffset int) {
+		func(currPos int, currCurrentPieceOffset int) {
 
 			// Lock the mutex to ensure exclusive access to the file
-			mutexDataWrite.Lock()
-			defer mutexDataWrite.Unlock()
-			defer wgDataWrite.Done()
 
 			startPiece := pieces.filesOffset[currPos].startOffset // This is offset for file
 			length := pieces.filesOffset[currPos].lengthOffset    // This is for file and pieces both
@@ -179,23 +166,28 @@ func writeToDisk(pieces *Piece) bool {
 			data := pieces.data[currCurrentPieceOffset : currCurrentPieceOffset+length]
 
 			// Open the file for writing
-			f, err := os.OpenFile(File.path, os.O_RDWR|os.O_CREATE, 0777)
-			if err != nil {
-				panic(err)
-			}
-			defer f.Close()
+			go func(currFile string, data []byte, startPiece int) {
 
-			_, err = f.WriteAt(data[:], int64(startPiece))
-			if err != nil {
-				panic(err)
-			}
+				mutexDataWrite.Lock()
+				defer mutexDataWrite.Unlock()
+
+				f, err := os.OpenFile(currFile, os.O_RDWR|os.O_CREATE, 0777)
+				if err != nil {
+					panic(err)
+				}
+				defer f.Close()
+
+				_, err = f.WriteAt(data[:], int64(startPiece))
+				if err != nil {
+					panic(err)
+				}
+
+			}(File.path, data, startPiece)
 
 		}(currPos, currCurrentPieceOffset)
 
 		currentPieceOffset += pieces.filesOffset[pos].lengthOffset
 	}
-
-	wgDataWrite.Wait()
 
 	return true
 
