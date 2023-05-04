@@ -184,13 +184,10 @@ func SendRequest(peerConnection *PeerConnection, pieceIndex uint32, offset int, 
 	peerConnection.connId.Write(buff)
 }
 
-func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConnectionList *[]PeerConnection, reBuild bool) {
+func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConnectionList *[]PeerConnection,
+	QueueNeededPieces chan *Piece, QueueFinishedPieces chan *Piece, pieces []*Piece) {
 
-	if reBuild == true {
-		defer wgRebuild.Done()
-	} else {
-		defer wg.Done()
-	}
+	defer wg.Done()
 
 	connection, err := net.Dial("tcp", fmt.Sprintf("%s:%d", currentPeer.IP, currentPeer.Port))
 	if err != nil {
@@ -199,7 +196,7 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 	}
 
 	// Waiting for 10 seconds for the response
-	err = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
+	err = connection.SetReadDeadline(time.Now().Add(15 * time.Second))
 	defer connection.SetReadDeadline(time.Time{})
 	if err != nil {
 		fmt.Println(err)
@@ -240,6 +237,9 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 	}
 
 	currentPeer.Handshake = true
+	currentPeer.InsideQueue = true
+
+	fmt.Println("Handshake Successfull with Peer : ", currentPeer.IP, ":", currentPeer.Port)
 
 	response := parseHandShakeResp(recieved, connection, currentPeer)
 
@@ -250,6 +250,9 @@ func SendHandshake(currentPeer *Peer, Torrent *gotorrentparser.Torrent, peerConn
 	SendUnchoke(&response)
 	SendInterested(&response)
 	sendBitfield(&response)
+
+	wg.Add(1)
+	go startNewDownload(&response, Torrent, QueueNeededPieces, QueueFinishedPieces, pieces)
 
 }
 

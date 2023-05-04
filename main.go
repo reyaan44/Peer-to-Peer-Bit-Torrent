@@ -144,17 +144,7 @@ func main() {
 	peerConnectionTcpList := []PeerConnection{}
 	for current := range peersList {
 		wg.Add(1)
-		go SendHandshake(&peersList[current], Torrent, &peerConnectionTcpList, false)
-	}
-	wg.Wait()
-
-	successfulPeers := len(peerConnectionTcpList)
-	fmt.Println("Total Number of Successful Peers : ", successfulPeers)
-
-	for i := range peerConnectionTcpList {
-		peerConnectionTcpList[i].peer.InsideQueue = true
-		wg.Add(1)
-		go startNewDownload(&peerConnectionTcpList[i], Torrent, QueueNeededPieces, QueueFinishedPieces, pieces)
+		go SendHandshake(&peersList[current], Torrent, &peerConnectionTcpList, QueueNeededPieces, QueueFinishedPieces, pieces)
 	}
 
 	// Create a channel to signal when all downloads are done
@@ -174,7 +164,7 @@ func main() {
 
 	go func(channelReConnection chan bool) {
 		for {
-			time.Sleep(time.Duration(waitTimeReConnection(successfulPeers)) * time.Second)
+			time.Sleep(300 * time.Second)
 			channelReConnection <- true
 		}
 	}(channelReConnection)
@@ -196,20 +186,7 @@ downloadLoop:
 				if peersList[current].Handshake == true {
 					continue
 				}
-				wgRebuild.Add(1)
-				go SendHandshake(&peersList[current], Torrent, &peerConnectionTcpList, true)
-			}
-			wgRebuild.Wait()
-
-			fmt.Println("New Total Number of Successful Peers Currently Added : ", len(peerConnectionTcpList)-successfulPeers)
-			successfulPeers = len(peerConnectionTcpList)
-
-			for current := range peerConnectionTcpList {
-				if peerConnectionTcpList[current].peer.Handshake == true && peerConnectionTcpList[current].peer.InsideQueue == false {
-					peerConnectionTcpList[current].peer.InsideQueue = true
-					wg.Add(1)
-					go startNewDownload(&peerConnectionTcpList[current], Torrent, QueueNeededPieces, QueueFinishedPieces, pieces)
-				}
+				go SendHandshake(&peersList[current], Torrent, &peerConnectionTcpList, QueueNeededPieces, QueueFinishedPieces, pieces)
 			}
 
 		case <-done:
