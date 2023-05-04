@@ -25,15 +25,14 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 
 	maxTryforPiece := 20
 
-	for maxTryforPiece > 0 {
+	for {
 		select {
+
 		case currPiece, ok := <-QueueNeededPieces:
 
 			if !ok {
-				// channel is closed, exit loop
 				return
 			}
-
 			if peerConnection.peer.Handshake == false || peerConnection.peer.InsideQueue == false {
 				QueueNeededPieces <- currPiece
 				peerConnection.peer.Handshake = false
@@ -101,13 +100,7 @@ func startNewDownload(peerConnection *PeerConnection, Torrent *gotorrentparser.T
 					return
 				}
 			}
-
-			if err != nil {
-				return
-			}
-
 		default:
-			// channel is empty, no more data expected, exit loop
 			return
 
 		}
