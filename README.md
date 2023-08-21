@@ -1,4 +1,13 @@
-# Peer-to-Peer-Bit-Torrent
+# Peer-to-Peer-Bit-Torrent\
+
+## How to run
+1. git clone https://github.com/reyaan44/Peer-to-Peer-Bit-Torrent.git
+2. go get .
+3. Download the required torrent file in 'torrents' folder
+4. go run . "torrent file name"
+
+Eg :- go run . movie1.torrent
+
 
 ## 20-04-2023
 ### Till Now
