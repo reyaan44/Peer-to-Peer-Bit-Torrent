@@ -1,4 +1,4 @@
-# Peer-to-Peer-Bit-Torrent\
+# Peer-to-Peer-Bit-Torrent
 
 ## How to run
 1. git clone https://github.com/reyaan44/Peer-to-Peer-Bit-Torrent.git
